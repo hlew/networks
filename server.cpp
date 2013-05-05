@@ -55,6 +55,7 @@ int main (int argc, char **argv) {
 
     sendtoErr_init(atof(argv[1]), DROP_OFF, FLIP_OFF, DEBUG_OFF, RSEED_ON);
 
+    //Test git
     server_sk_num = udp_server();
     cout << "Server socket descriptor: " << server_sk_num <<endl;
 
