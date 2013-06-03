@@ -28,7 +28,7 @@ extern "C" {
 
 enum FLAG
 {
-	FNAME, DATA, FNAME_OK, FNAME_BAD, ACK, END_OF_FILE, CRC_ERROR
+	DATA=1, RESEND=2, ACK=3, NAK=4, FNAME=6, FNAME_OK=7, FNAME_BAD=8,  END_OF_FILE, CRC_ERROR
 };
 
 enum SELECT
@@ -38,12 +38,13 @@ enum SELECT
 
 typedef struct connection Connection;
 
-
 struct connection
 {
   int32_t sk_num;
   struct sockaddr_in remote;
   u_int32_t len;
+  u_int32_t buf_size; //buffer-size for data
+  u_int32_t window_size;	  // window size
 };
 
 int32_t udp_server();

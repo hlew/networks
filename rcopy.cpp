@@ -22,7 +22,8 @@ int main (int argc, char **argv) {
     	        exit(1);
     	    }
 
-    	    state = filename(argv[1], atoi(argv[3]));
+    	    // 				 filename, buffer-size
+    	    state = filename(argv[1], atoi(argv[3]), atoi(argv[5]));
 
     	    /* If no response from the server then repeat sending filename (close socket) so you can open another */
     	    if (state == FILENAME)
@@ -64,7 +65,7 @@ int main (int argc, char **argv) {
     return 0;
 }
 
-STATE filename(char *fname, int32_t buf_size) {
+STATE filename(char *fname, int32_t buf_size, int32_t win_size) {
 	uint8_t packet[MAX_LEN];
 	uint8_t buf[MAX_LEN];
 	uint8_t flag = 0;
@@ -73,9 +74,10 @@ STATE filename(char *fname, int32_t buf_size) {
 	int32_t recv_check = 0;
 
 	memcpy(buf, &buf_size, 4);
-	memcpy(&buf[4], fname, fname_len);
+	memcpy(&buf[4], &win_size, 4);
+	memcpy(&buf[8], fname, fname_len);
 
-	send_buf(buf, fname_len + 4, &server, FNAME, 0, packet);
+	send_buf(buf, fname_len + 8, &server, FNAME, 0, packet);
 
 	if(select_call(server.sk_num, 1, 0, NOT_NULL) == 1) {
 		recv_check = recv_buf(packet, 1000, server.sk_num, &server, &flag, &seq_num);

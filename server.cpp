@@ -17,6 +17,7 @@
 #include <iostream>
 #include "networks.h"
 
+#define WINDOW_SIZE 1
 
 using namespace std;
 
@@ -27,12 +28,23 @@ enum State {
 
 typedef enum State STATE;
 
+enum status {
+	SENT, NOT_SENT
+};
+
+struct buffer {
+	status send_status;
+	uint8_t data[MAX_LEN];
+};
 
 void process_client(int32_t server_sk_num, uint8_t *buf, int32_t recv_len, Connection * client);
-STATE filename(Connection *client, uint8_t *buf, int32_t recv_len, int32_t *data_file, int32_t *buf_size);
-STATE send_data(Connection *client, uint8_t *packet, int32_t *packet_len, int32_t data_file, int32_t buf_size, int32_t *seq_num);
+STATE filename(Connection *client, uint8_t *buf, int32_t recv_len, int32_t *data_file, int32_t *buf_size, int32_t *win_size);
+STATE send_data(Connection *client, uint8_t *packet, int32_t *packet_len, int32_t data_file, int32_t buf_size, int32_t *seq_num, buffer *window);
 STATE timeout_on_ack(Connection *client, uint8_t *packet, int32_t packet_len);
 STATE wait_on_ack(Connection *client);
+
+
+
 
 int main (int argc, char **argv) {
 	int32_t server_sk_num = 0;
@@ -96,7 +108,10 @@ void process_client(int32_t server_sk_num, uint8_t *buf, int32_t recv_len, Conne
 	int32_t packet_len = 0;
 	uint8_t packet[MAX_LEN];
 	int32_t buf_size = 0;
+	int32_t win_size = 0;
 	int32_t seq_num = START_SEQ_NUM;
+	buffer *window;
+
 
 	while (state != DONE) {
 		switch(state) {
@@ -106,11 +121,12 @@ void process_client(int32_t server_sk_num, uint8_t *buf, int32_t recv_len, Conne
 
 		case FILENAME:
 			seq_num = 1;
-			state = filename(client, buf, recv_len, &data_file, &buf_size);
+			state = filename(client, buf, recv_len, &data_file, &buf_size, &win_size);
 			break;
 
 		case SEND_DATA:
-			state = send_data(client, packet, &packet_len, data_file, buf_size, &seq_num);
+			window = new buffer [win_size];
+			state = send_data(client, packet, &packet_len, data_file, buf_size, &seq_num, &window[0]);
 			break;
 
 		case WAIT_ON_ACK:
@@ -134,12 +150,13 @@ void process_client(int32_t server_sk_num, uint8_t *buf, int32_t recv_len, Conne
 	return;
 }
 
-STATE filename(Connection *client, uint8_t *buf, int32_t recv_len, int32_t * data_file, int32_t *buf_size) {
+STATE filename(Connection *client, uint8_t *buf, int32_t recv_len, int32_t * data_file, int32_t *buf_size, int32_t *win_size) {
 	uint8_t response[1];
 	char fname[MAX_LEN];
 
 	memcpy(buf_size, buf, 4);
-	memcpy(fname, &buf[4], recv_len-4);
+	memcpy(win_size, &buf[4], 4);
+	memcpy(fname, &buf[8], recv_len-8);
 
 	/*Create client socket to allow for processing this particular client */
 
@@ -159,7 +176,7 @@ STATE filename(Connection *client, uint8_t *buf, int32_t recv_len, int32_t * dat
 	}
 }
 
-STATE send_data(Connection *client, uint8_t *packet, int32_t *packet_len, int32_t data_file, int buf_size, int32_t *seq_num) {
+STATE send_data(Connection *client, uint8_t *packet, int32_t *packet_len, int32_t data_file, int buf_size, int32_t *seq_num, buffer *window) {
 	uint8_t buf[MAX_LEN];
 	int32_t len_read = 0;
 
@@ -180,6 +197,7 @@ STATE send_data(Connection *client, uint8_t *packet, int32_t *packet_len, int32_
 
 	default:
 		(*packet_len) = send_buf(buf, len_read, client, DATA, *seq_num, packet);
+		printf("Sequence number sent: %i\n",(*seq_num));
 		(*seq_num)++;
 		return WAIT_ON_ACK;
 		break;
