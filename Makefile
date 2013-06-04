@@ -7,7 +7,7 @@ INCLUDES	= -I$(srcdir)
 CXXFLAGS          = -Wall -pedantic -ansi -D_GNU_SOURCE -g
 # CXXFLAGS        = -O3
 LDFLAGS		= 
-LIBS		= -lstdc++ libcpe464.2.12.a
+LIBS		= -lstdc++ -lrt libcpe464.2.12.a
 
 # DEPEND		= makedepend
 # DEPEND_FLAGS	= 
