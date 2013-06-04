@@ -4,12 +4,28 @@ using namespace std;
 
 Connection server;
 
+#define DEFAULT_WINDOW_SIZE 1
+
+enum status {
+	RECVD, NOT_RECVD
+};
+
+struct buffer {
+	uint32_t seq_num;
+	status recv_status;
+	uint8_t data[MAX_LEN];
+	int32_t len_read;
+};
+
+
 int main (int argc, char **argv) {
 	int32_t output_file = 0;
 	int32_t select_count = 0;
 	STATE state = FILENAME;
     check_args(argc, argv);
-    
+    int32_t win_size = atoi(argv[5]);
+	buffer *window = new buffer [win_size];
+
     sendtoErr_init(atof(argv[4]), DROP_OFF, FLIP_OFF, DEBUG_ON, RSEED_ON);
 
     state = FILENAME;
@@ -50,6 +66,7 @@ int main (int argc, char **argv) {
     		break;
 
     	case RECV_DATA:
+
     		state = recv_data(output_file);
     		break;
 
@@ -110,7 +127,6 @@ STATE recv_data(int32_t output_file) {
 		printf("Timeout after 10 seconds, client done.\n");
 		return DONE;
 	}
-	sleep(3);
 	data_len = recv_buf(data_buf, 1400, server.sk_num, &server, &flag, &seq_num);
 
 	/* do state RECV_DATA again if there is a CRC error (don't send ack, don't write data) */

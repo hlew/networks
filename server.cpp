@@ -144,6 +144,7 @@ void process_client(int32_t server_sk_num, uint8_t *buf, int32_t recv_len, Conne
 			break;
 
 		case DONE:
+			delete [] window;
 			break;
 
 		default:
