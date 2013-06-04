@@ -38,6 +38,7 @@ struct buffer {
 	status send_status;
 	uint8_t data[MAX_LEN];
 	int32_t len_read;
+	int32_t resend_count;
 };
 
 void process_client(int32_t server_sk_num, uint8_t *buf, int32_t recv_len, Connection * client);
@@ -195,16 +196,22 @@ STATE send_data(Connection *client, uint8_t *packet, int32_t *packet_len, int32_
 		window[(*seq_num) % win_size].len_read = read(data_file, window[(*seq_num) % win_size].data, buf_size);
 		window[(*seq_num) % win_size].send_status = NOT_SENT;
 		window[(*seq_num) % win_size].seq_num = (*seq_num);
+		window[(*seq_num) % win_size].resend_count = 0;
 		client->win_status = OPEN;
 		(*seq_num)++;
 	}
 
-	// Timeout on Ack
+	// Resend Timeout on Ack
 	if (window[base % win_size].send_status == TIMEOUT) {
 		memcpy(buf, window[base % win_size].data, window[base % win_size].len_read);
 		(*packet_len) = send_buf(buf, window[base % win_size].len_read, client, RESEND, window[base % win_size].seq_num, packet);
 		window[base % win_size].send_status = SENT;
-
+		window[base % win_size].resend_count++;
+		printf("send count for frame %i is: %i\n", window[base % win_size].seq_num, window[base % win_size].resend_count);
+		if(window[base % win_size].resend_count > 9) {
+			printf("Sent data 10 times no ACK client session terminated\n");
+			return(DONE);
+		}
 		return WAIT_ON_ACK;
 	}
 
@@ -215,13 +222,18 @@ STATE send_data(Connection *client, uint8_t *packet, int32_t *packet_len, int32_
 		if (window[i % win_size].send_status == SREJ) {
 			memcpy(buf, window[i % win_size].data, window[i % win_size].len_read);
 			(*packet_len) = send_buf(buf, window[i % win_size].len_read, client, RESEND, window[i % win_size].seq_num, packet);
-			window[i % win_size].send_status == SENT;
-
+			window[i % win_size].send_status = SENT;
+			window[i % win_size].resend_count++;
+			printf("send count for frame %i is: %i\n", window[i % win_size].seq_num, window[i % win_size].resend_count);
+			if(window[i % win_size].resend_count > 9) {
+				printf("Sent data 10 times no ACK client session terminated\n");
+				return(DONE);
+			}
 			printf("Resent -- -- Sequence number: %i\n", window[i % win_size].seq_num);
 		}
 	}
 
-	// Check for unsent packets in buffer
+	// Check for unsent packets in buffer and prepare for sending
 	for (i = base; i <= (base + win_size); i++) {
 		if (i == (base + win_size)) {
 			client->win_status = CLOSED;
@@ -260,19 +272,12 @@ STATE send_data(Connection *client, uint8_t *packet, int32_t *packet_len, int32_
 }
 
 STATE wait_on_ack(Connection *client, buffer *window) {
-	static int32_t send_count = 0;
 	uint32_t crc_check = 0;
 	uint8_t buf[MAX_LEN];
 	int32_t len = 1000;
 	uint8_t flag = 0;
 	int32_t seq_num = 0;
 
-	send_count++;
-	printf("send_count is: %i\n", send_count);
-	if(send_count > 10) {
-		printf("Sent data 10 times no ACK client session terminated\n");
-		return(DONE);
-	}
 
 	if (client->win_status == OPEN) {
 		if (select_call(client->sk_num, 0, 0, NOT_NULL) != 1) {
@@ -299,14 +304,12 @@ STATE wait_on_ack(Connection *client, buffer *window) {
 	if (flag == ACK) {
 		client->base = seq_num;
 		/*ack is good so reset count and then go send some more data */
-		send_count = 0;
 		return WAIT_ON_ACK;
 	}
 
 	if (flag == NAK) {
 		window[seq_num % client->window_size].send_status = SREJ;
 		/*ack is good so reset count and then go send some more data */
-		send_count = 0;
 		return SEND_DATA;
 	}
 
