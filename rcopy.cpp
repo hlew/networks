@@ -2,12 +2,12 @@
 
 using namespace std;
 
-Connection server;
+
 
 #define DEFAULT_WINDOW_SIZE 1
 
 enum status {
-	RECVD, NOT_RECVD
+	RECVD, NOT_RECVD, SREJ
 };
 
 struct buffer {
@@ -18,6 +18,12 @@ struct buffer {
 };
 
 
+STATE filename(char *fname, int32_t buf_size, int32_t win_size);
+STATE recv_data(int32_t output_file, buffer *window);
+void check_args(int argc, char **argv);
+
+Connection server;
+
 int main (int argc, char **argv) {
 	int32_t output_file = 0;
 	int32_t select_count = 0;
@@ -25,6 +31,11 @@ int main (int argc, char **argv) {
     check_args(argc, argv);
     int32_t win_size = atoi(argv[5]);
 	buffer *window = new buffer [win_size];
+	int i;
+
+	for (i=0; i < win_size; i++) {
+		window[i].recv_status = NOT_RECVD;
+	}
 
     sendtoErr_init(atof(argv[4]), DROP_OFF, FLIP_OFF, DEBUG_ON, RSEED_ON);
 
@@ -61,13 +72,14 @@ int main (int argc, char **argv) {
     			state = DONE;
     		}
     		else {
+    			server.base = START_SEQ_NUM;
+    			server.window_size = win_size;
     			state = RECV_DATA;
     		}
     		break;
 
     	case RECV_DATA:
-
-    		state = recv_data(output_file);
+    		state = recv_data(output_file, &window[0]);
     		break;
 
     	case DONE:
@@ -115,7 +127,7 @@ STATE filename(char *fname, int32_t buf_size, int32_t win_size) {
 }
 
 
-STATE recv_data(int32_t output_file) {
+STATE recv_data(int32_t output_file, buffer *window) {
 	int32_t seq_num = 0;
 	uint8_t flag = 0;
 	int32_t data_len = 0;
@@ -127,6 +139,7 @@ STATE recv_data(int32_t output_file) {
 		printf("Timeout after 10 seconds, client done.\n");
 		return DONE;
 	}
+
 	data_len = recv_buf(data_buf, 1400, server.sk_num, &server, &flag, &seq_num);
 
 	/* do state RECV_DATA again if there is a CRC error (don't send ack, don't write data) */
@@ -134,19 +147,91 @@ STATE recv_data(int32_t output_file) {
 		return RECV_DATA;
 	}
 
-	/*send ACK*/
-	send_buf(packet, 1, &server, ACK, seq_num + 1, packet);
 
 	if (flag == END_OF_FILE) {
 		printf("Flag is %i\n", flag);
 		printf("File done\n");
+		send_buf(packet, 1, &server, END_OF_FILE_ACK, seq_num + 1, packet);
 		return DONE;
 	}
 
-	if (seq_num == expected_seq_num)
-	{
-		expected_seq_num++;
-		write(output_file, & data_buf, data_len);
+	if (seq_num >= (server.base + server.window_size)) {
+		printf("seq_num above window: should never be here\n"); // discard
+		return RECV_DATA;
+	}
+
+	if (seq_num == expected_seq_num) {
+		if (seq_num == server.base) {
+			// send the frame to the upper layer
+			server.base++;
+			expected_seq_num = server.base; // or expected_seq_num++;
+			if (write(output_file, & data_buf, data_len) < 0)
+				perror("in recv data");
+			else
+				window[seq_num % server.window_size].recv_status = NOT_RECVD;
+
+		}
+		else {
+			// buffer the frame to the window
+			expected_seq_num = expected_seq_num + 1;
+			window[seq_num % server.window_size].recv_status = RECVD;
+			window[seq_num % server.window_size].len_read = data_len;
+			window[seq_num % server.window_size].seq_num = seq_num;
+			memcpy(window[seq_num % server.window_size].data, data_buf, data_len);
+		}
+		/*send ACK - RR base with cumulative ACK*/
+		send_buf(packet, 1, &server, ACK, server.base, packet);
+
+		return RECV_DATA;
+	}
+	else if (seq_num > expected_seq_num) {
+		// Send a SREJ for every packet missing
+		for (; expected_seq_num < seq_num; expected_seq_num++) {
+			send_buf(packet, 1, &server, NAK, expected_seq_num, packet);
+			window[seq_num % server.window_size].recv_status = SREJ;
+		}
+		expected_seq_num = seq_num + 1;
+		window[seq_num % server.window_size].recv_status = RECVD;
+		window[seq_num % server.window_size].len_read = data_len;
+		window[seq_num % server.window_size].seq_num = seq_num;
+		memcpy(window[seq_num % server.window_size].data, data_buf, data_len);
+		return RECV_DATA;
+	}
+	else if (seq_num < expected_seq_num) {
+		if (seq_num == server.base) {
+			window[seq_num % server.window_size].recv_status = RECVD;
+			window[seq_num % server.window_size].len_read = data_len;
+			window[seq_num % server.window_size].seq_num = seq_num;
+			memcpy(window[seq_num % server.window_size].data, data_buf, data_len);
+			// find next base ::: base = lowest non-recvd
+			for (; server.base < (server.base + server.window_size); server.base++) {
+				if (window[server.base % server.window_size].recv_status == RECVD) {
+					if (write(output_file, window[server.base % server.window_size].data,
+						window[server.base % server.window_size].len_read) < 0)
+					{
+						perror("in recv data");
+					}
+					window[server.base % server.window_size].recv_status = NOT_RECVD;
+
+				}
+				else { break; }
+			}
+			// RR new base
+			/*send ACK - RR base with cumulative ACK*/
+			send_buf(packet, 1, &server, ACK, server.base, packet);
+
+		}
+
+		else if (seq_num < server.base) {
+			send_buf(packet, 1, &server, ACK, seq_num, packet);
+		}
+		else if (seq_num > server.base) {
+			window[seq_num % server.window_size].recv_status = RECVD;
+			window[seq_num % server.window_size].len_read = data_len;
+			window[seq_num % server.window_size].seq_num = seq_num;
+			memcpy(window[seq_num % server.window_size].data, data_buf, data_len);
+		}
+		return RECV_DATA;
 	}
 
 	return RECV_DATA;

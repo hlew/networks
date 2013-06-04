@@ -68,7 +68,7 @@ int main (int argc, char **argv) {
         exit(-1);
     }
 
-    sendtoErr_init(atof(argv[1]), DROP_OFF, FLIP_OFF, DEBUG_OFF, RSEED_ON);
+    sendtoErr_init(atof(argv[1]), DROP_ON, FLIP_OFF, DEBUG_ON, RSEED_ON);
 
 
     server_sk_num = udp_server();
@@ -123,7 +123,7 @@ void process_client(int32_t server_sk_num, uint8_t *buf, int32_t recv_len, Conne
 			break;
 
 		case FILENAME:
-			seq_num = 1;
+			seq_num = START_SEQ_NUM;
 			delete [] window;
 			state = filename(client, buf, recv_len, &data_file, &buf_size, &win_size);
 			client->base = seq_num;
@@ -203,7 +203,7 @@ STATE send_data(Connection *client, uint8_t *packet, int32_t *packet_len, int32_
 	if (window[base % win_size].send_status == TIMEOUT) {
 		memcpy(buf, window[base % win_size].data, window[base % win_size].len_read);
 		(*packet_len) = send_buf(buf, window[base % win_size].len_read, client, RESEND, window[base % win_size].seq_num, packet);
-		window[base % win_size].send_status == SENT;
+		window[base % win_size].send_status = SENT;
 
 		return WAIT_ON_ACK;
 	}
@@ -217,7 +217,7 @@ STATE send_data(Connection *client, uint8_t *packet, int32_t *packet_len, int32_
 			(*packet_len) = send_buf(buf, window[i % win_size].len_read, client, RESEND, window[i % win_size].seq_num, packet);
 			window[i % win_size].send_status == SENT;
 
-			printf("Resent -- -- Sequence number: %i\n", window[i].seq_num);
+			printf("Resent -- -- Sequence number: %i\n", window[i % win_size].seq_num);
 		}
 	}
 
@@ -257,27 +257,6 @@ STATE send_data(Connection *client, uint8_t *packet, int32_t *packet_len, int32_
 		break;
 	}
 
-
-//		switch(len_read)
-//		{
-//		case -1:
-//			perror("send_data, read err");
-//			return DONE;
-//			break;
-//
-//		case 0:
-//			(*packet_len) = send_buf(buf, 1, client, END_OF_FILE, *seq_num, packet);
-//			printf("File Transfer Complete\n");
-//			return DONE;
-//			break;
-//
-//		default:
-//			(*packet_len) = send_buf(buf, len_read, client, DATA, *seq_num, packet);
-//			printf("Sequence number sent: %i\n",(*seq_num));
-//			(*seq_num)++;
-//			return WAIT_ON_ACK;
-//			break;
-//		}
 }
 
 STATE wait_on_ack(Connection *client, buffer *window) {
@@ -289,6 +268,7 @@ STATE wait_on_ack(Connection *client, buffer *window) {
 	int32_t seq_num = 0;
 
 	send_count++;
+	printf("send_count is: %i\n", send_count);
 	if(send_count > 10) {
 		printf("Sent data 10 times no ACK client session terminated\n");
 		return(DONE);
