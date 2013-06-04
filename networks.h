@@ -36,6 +36,10 @@ enum SELECT
     SET_NULL, NOT_NULL
   };
 
+enum WINDOW {
+	OPEN, CLOSED
+};
+
 typedef struct connection Connection;
 
 struct connection
@@ -45,6 +49,8 @@ struct connection
   u_int32_t len;
   u_int32_t buf_size; //buffer-size for data
   u_int32_t window_size;	  // window size
+  int32_t base;				  // base of window
+  int32_t win_status;		  // whether or not the window is OPEN or CLOSED
 };
 
 int32_t udp_server();

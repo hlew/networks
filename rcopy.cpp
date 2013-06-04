@@ -119,7 +119,7 @@ STATE recv_data(int32_t output_file) {
 	}
 
 	/*send ACK*/
-	send_buf(packet, 1, &server, ACK, 0, packet);
+	send_buf(packet, 1, &server, ACK, seq_num, packet);
 
 	if (flag == END_OF_FILE) {
 		printf("File done\n");
