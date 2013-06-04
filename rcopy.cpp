@@ -10,7 +10,7 @@ int main (int argc, char **argv) {
 	STATE state = FILENAME;
     check_args(argc, argv);
     
-    sendtoErr_init(atof(argv[4]), DROP_OFF, FLIP_OFF, DEBUG_OFF, RSEED_ON);
+    sendtoErr_init(atof(argv[4]), DROP_OFF, FLIP_OFF, DEBUG_ON, RSEED_ON);
 
     state = FILENAME;
     while (state != DONE) {
@@ -22,7 +22,7 @@ int main (int argc, char **argv) {
     	        exit(1);
     	    }
 
-    	    // 				 filename, buffer-size
+    	    // 				 filename, buffer-size, window size
     	    state = filename(argv[1], atoi(argv[3]), atoi(argv[5]));
 
     	    /* If no response from the server then repeat sending filename (close socket) so you can open another */
@@ -106,11 +106,11 @@ STATE recv_data(int32_t output_file) {
 	uint8_t packet[MAX_LEN];
 	static int32_t expected_seq_num = START_SEQ_NUM;
 
-	if (select_call(server.sk_num, 10, 0, NOT_NULL)== 0) {
+	if (select_call(server.sk_num, 10, 0, SET_NULL)== 0) {
 		printf("Timeout after 10 seconds, client done.\n");
 		return DONE;
 	}
-
+	sleep(3);
 	data_len = recv_buf(data_buf, 1400, server.sk_num, &server, &flag, &seq_num);
 
 	/* do state RECV_DATA again if there is a CRC error (don't send ack, don't write data) */
@@ -119,9 +119,10 @@ STATE recv_data(int32_t output_file) {
 	}
 
 	/*send ACK*/
-	send_buf(packet, 1, &server, ACK, seq_num, packet);
+	send_buf(packet, 1, &server, ACK, seq_num + 1, packet);
 
 	if (flag == END_OF_FILE) {
+		printf("Flag is %i\n", flag);
 		printf("File done\n");
 		return DONE;
 	}
@@ -166,6 +167,6 @@ void check_args(int argc, char **argv)
     }
 
     if (atoi(argv[4]) < 0 || atoi(argv[4]) >= 1) {
-    	printf("error rate needs to be between 0 and less than 1 and is: %\n", atoi(argv[4]));
+    	printf("error rate needs to be between 0 and less than 1 and is: %d\n", atoi(argv[4]));
     }
 }
