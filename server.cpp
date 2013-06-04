@@ -68,7 +68,7 @@ int main (int argc, char **argv) {
         exit(-1);
     }
 
-    sendtoErr_init(atof(argv[1]), DROP_OFF, FLIP_OFF, DEBUG_ON, RSEED_ON);
+    sendtoErr_init(atof(argv[1]), DROP_OFF, FLIP_OFF, DEBUG_OFF, RSEED_ON);
 
 
     server_sk_num = udp_server();

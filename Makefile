@@ -1,34 +1,29 @@
-TARGETS         = rcopy
-SRCS            = rcopy.cpp networks.c
-HEADERS         = networks.h rcopy.h cpe464.h
-OBJS            = $(SRCS:.cc=.o)
-srcdir          = .
-INCLUDES	= -I$(srcdir)
-CXXFLAGS          = -Wall -pedantic -ansi -D_GNU_SOURCE -g
-# CXXFLAGS        = -O3
-LDFLAGS		= 
-LIBS		= -lstdc++ -lrt libcpe464.2.12.a
+# Makefile for CPE464 program 3
 
-# DEPEND		= makedepend
-# DEPEND_FLAGS	= 
-# DEPEND_DEFINES	= 
+CC= g++
+CFLAGS= -g -D_GNU_SOURCE -Wall -pedantic -ansi 
 
+# The  -lsocket -lnsl are needed for the sockets.
+# The -L/usr/ucblib -lucb gives location for the Berkeley library needed for
+# the bcopy, bzero, and bcmp.  The -R/usr/ucblib tells where to load
+# the runtime library.
 
-default: $(TARGETS) server
+# The next line is needed on Sun boxes (so uncomment it if your on a
+# sun box)
+# LIBS =  -lsocket -lnsl
 
-all: default
+# For Linux/Mac boxes uncomment the next line - the socket and nsl
+# libraries are already in the link path.
+LIBS = -lstdc++ -lrt libcpe464.2.12.a
 
-server : server.o networks.o networks.h cpe464.h
-	$(CXX) $(LDFLAGS) -o $@ server.cpp networks.c $(LIBS)
+all:   rcopy server
 
-$(TARGETS): $(OBJS) $(HEADERS)
-	$(CXX) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
+rcopy: rcopy.cpp rcopy.h networks.h  networks.c cpe464.h
+	$(CC) $(CFLAGS) -o rcopy rcopy.cpp networks.c $(LIBS)
 
-clean:  
-	-rm -f *.o $(TARGETS) server
+server: server.cpp networks.h networks.c cpe464.h
+	$(CC) $(CFLAGS) -o server server.cpp networks.c $(LIBS)
 
-
-# depend:
-# 	$(DEPEND) -s '# DO NOT DELETE: updated by make depend'		   \
-# 	$(DEPEND_FLAGS) -- $(INCLUDES) $(DEFS) $(DEPEND_DEFINES) $(CFLAGS) \
-# 	-- $(SRCS)
+clean:
+	rm -f *.o server rcopy
+ 
