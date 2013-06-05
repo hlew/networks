@@ -1,4 +1,8 @@
 /* used for network functions  */
+/* Author: Dr. Hugh Smith
+ * Used with permission and modified by
+ * Hiram Riley Lew */
+
 #include <sys/socket.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,6 +44,10 @@ enum WINDOW {
 	OPEN, CLOSED
 };
 
+enum BOOLEAN {
+	FALSE, TRUE
+};
+
 typedef struct connection Connection;
 
 struct connection
@@ -47,10 +55,13 @@ struct connection
   int32_t sk_num;
   struct sockaddr_in remote;
   u_int32_t len;
-  u_int32_t buf_size; //buffer-size for data
+  u_int32_t buf_size; 		  //buffer-size for data
   u_int32_t window_size;	  // window size
   int32_t base;				  // base of window
   int32_t win_status;		  // whether or not the window is OPEN or CLOSED
+  uint32_t final_seq_num;	  // handles last window of ACKs
+  uint32_t last_ack;		  // last ack to wait for
+  BOOLEAN final_seq_sent;	  // EOF reached?
 };
 
 int32_t udp_server();
